@@ -1,5 +1,3 @@
-/* @flow */
-
 import * as React from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -24,6 +22,7 @@ type IndicatorProps<T> = SceneRendererProps<T> & {
 };
 
 type Props<T> = SceneRendererProps<T> & {
+  isAutoSizeIndicator?: boolean,
   scrollEnabled?: boolean,
   bounces?: boolean,
   pressColor?: string,
@@ -55,6 +54,7 @@ const useNativeDriver = Boolean(NativeModules.NativeAnimatedModule);
 export default class TabBar<T: *> extends React.Component<Props<T>, State> {
   static propTypes = {
     ...SceneRendererPropType,
+    isAutoSizeIndicator: PropTypes.bool,
     scrollEnabled: PropTypes.bool,
     bounces: PropTypes.bool,
     pressColor: TouchableItem.propTypes.pressColor,
@@ -83,6 +83,11 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
 
   constructor(props: Props<T>) {
     super(props);
+
+    this.indicatorWidth = [];
+    for (let i = 0; i < this.props.navigationState.routes.length; i++) {
+      this.indicatorWidth.push(0);
+    }
 
     let initialVisibility = 1;
 
@@ -250,6 +255,9 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
       }
     }
 
+    if (props.isAutoSizeIndicator) {
+      return this.indicatorWidth[navigationState.index];
+    }
     if (props.scrollEnabled) {
       return (layout.width / 5) * 2;
     }
@@ -352,8 +360,27 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
     this._isManualScroll = false;
   };
 
+  _renderAutoWidthIndicator = (props: IndicatorProps<T>) => {
+    if (typeof this.props.renderIndicator !== 'undefined') {
+      return this.props.renderIndicator(props);
+    }
+    const { width, position, navigationState } = props;
+    let translateX = 0;
+    for (let i = 0; i < navigationState.index; i++) {
+      translateX = translateX + this.indicatorWidth[i];
+    }
+    return (
+      <Animated.View
+        style={[
+          styles.indicator,
+          { width, transform: [{ translateX }] },
+          this.props.indicatorStyle,
+        ]} />
+    );
+  };
+
   render() {
-    const { position, navigationState, scrollEnabled, bounces } = this.props;
+    const { position, navigationState, scrollEnabled, bounces, isAutoSizeIndicator } = this.props;
     const { routes } = navigationState;
     const tabWidth = this._getTabWidth(this.props);
     const tabBarWidth = tabWidth * routes.length;
@@ -362,6 +389,11 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
     const inputRange = [-1, ...routes.map((x, i) => i)];
     const translateX = Animated.multiply(this.state.scrollAmount, -1);
 
+    let tabBarWidthCustom = 0;
+    for (let i = 0; i < this.indicatorWidth.length; i++) {
+      tabBarWidthCustom = tabBarWidthCustom + this.indicatorWidth[i];
+    }
+
     return (
       <Animated.View style={[styles.tabBar, this.props.style]}>
         <Animated.View
@@ -369,14 +401,24 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
           style={[
             styles.indicatorContainer,
             scrollEnabled
-              ? { width: tabBarWidth, transform: [{ translateX }] }
+              ? {
+                width: (isAutoSizeIndicator ? tabBarWidthCustom : tabBarWidth),
+                transform: [{translateX}]
+              }
               : null,
           ]}
         >
-          {this._renderIndicator({
-            ...this.props,
-            width: tabWidth,
-          })}
+          {
+            isAutoSizeIndicator ?
+              this._renderAutoWidthIndicator({
+                ...this.props,
+                width: this.indicatorWidth[navigationState.index],
+              }) :
+              this._renderIndicator({
+                ...this.props,
+                width: tabWidth,
+              })
+          }
         </Animated.View>
         <View style={styles.scroll}>
           <Animated.ScrollView
@@ -488,7 +530,11 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
                   onLongPress={() => this._handleTabLongPress({ route })}
                   style={tabContainerStyle}
                 >
-                  <View pointerEvents="none" style={styles.container}>
+                  <View pointerEvents="none" style={styles.container}
+                        onLayout={(event) => {
+                          const {x, y, width, height} = event.nativeEvent.layout;
+                          this.indicatorWidth[i] = width;
+                        }}>
                     <Animated.View
                       style={[
                         styles.tabItem,
