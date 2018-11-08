@@ -47,6 +47,7 @@ type State = {|
   visibility: Animated.Value,
   scrollAmount: Animated.Value,
   initialOffset: ?{| x: number, y: number |},
+  indicatorWidth: ?any,
 |};
 
 const useNativeDriver = Boolean(NativeModules.NativeAnimatedModule);
@@ -84,10 +85,11 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
   constructor(props: Props<T>) {
     super(props);
 
-    this.indicatorWidth = [];
+    const indicatorWidth = [];
     for (let i = 0; i < this.props.navigationState.routes.length; i++) {
-      this.indicatorWidth.push(0);
+      indicatorWidth.push(0);
     }
+    this.indicatorWidth = indicatorWidth;
 
     let initialVisibility = 1;
 
@@ -113,6 +115,7 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
       visibility: new Animated.Value(initialVisibility),
       scrollAmount: new Animated.Value(0),
       initialOffset,
+      indicatorWidth: indicatorWidth
     };
   }
 
@@ -136,7 +139,7 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
 
     if (
       prevProps.navigationState.routes.length !==
-        this.props.navigationState.routes.length ||
+      this.props.navigationState.routes.length ||
       prevProps.layout.width !== this.props.layout.width
     ) {
       this._resetScroll(this.props.navigationState.index, false);
@@ -306,13 +309,13 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
     if (this.props.scrollEnabled) {
       global.cancelAnimationFrame(this._scrollResetCallback);
       this._scrollView &&
-        this._scrollView.scrollTo({
-          x: this._normalizeScrollValue(
-            this.props,
-            this._getScrollAmount(this.props, value)
-          ),
-          animated: !this._isIntial, // Disable animation for the initial render
-        });
+      this._scrollView.scrollTo({
+        x: this._normalizeScrollValue(
+          this.props,
+          this._getScrollAmount(this.props, value)
+        ),
+        animated: !this._isIntial, // Disable animation for the initial render
+      });
 
       this._isIntial = false;
     }
@@ -323,10 +326,10 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
       global.cancelAnimationFrame(this._scrollResetCallback);
       this._scrollResetCallback = global.requestAnimationFrame(() => {
         this._scrollView &&
-          this._scrollView.scrollTo({
-            x: this._getScrollAmount(this.props, value),
-            animated,
-          });
+        this._scrollView.scrollTo({
+          x: this._getScrollAmount(this.props, value),
+          animated,
+        });
       });
     }
   };
@@ -379,6 +382,17 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
     );
   };
 
+  updateWidthIndicator() {
+    if (this.timeoutUpdateWidthIndicator) {
+      clearTimeout(this.timeoutUpdateWidthIndicator);
+    }
+    this.timeoutUpdateWidthIndicator = setTimeout(() => {
+      this.setState({
+        indicatorWidth: this.indicatorWidth
+      });
+    }, 200);
+  }
+
   render() {
     const { position, navigationState, scrollEnabled, bounces, isAutoSizeIndicator } = this.props;
     const { routes } = navigationState;
@@ -390,8 +404,8 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
     const translateX = Animated.multiply(this.state.scrollAmount, -1);
 
     let tabBarWidthCustom = 0;
-    for (let i = 0; i < this.indicatorWidth.length; i++) {
-      tabBarWidthCustom = tabBarWidthCustom + this.indicatorWidth[i];
+    for (let i = 0; i < this.state.indicatorWidth.length; i++) {
+      tabBarWidthCustom = tabBarWidthCustom + this.state.indicatorWidth[i];
     }
 
     return (
@@ -533,7 +547,10 @@ export default class TabBar<T: *> extends React.Component<Props<T>, State> {
                   <View pointerEvents="none" style={styles.container}
                         onLayout={(event) => {
                           const {x, y, width, height} = event.nativeEvent.layout;
-                          this.indicatorWidth[i] = width;
+                          if(this.indicatorWidth[i]===0) {
+                            this.indicatorWidth[i] = width;
+                            this.updateWidthIndicator();
+                          }
                         }}>
                     <Animated.View
                       style={[
